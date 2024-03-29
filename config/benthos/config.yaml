@@ -1,0 +1,62 @@
+input:
+    http_client:
+        url: https://api.sportradar.com/soccer-extended/${SPORTRADAR_ACCESS_LEVEL}/v4/stream/events/subscribe?api_key=${SPORTRADAR_API_KEY}&format=json
+        verb: GET
+        stream:
+            enabled: true
+            reconnect: true
+            scanner:
+                lines: { }
+
+pipeline:
+    processors:
+        -   log:
+                level: INFO
+                message: Message received
+                fields_mapping: |
+                    root.heartbeat = this.heartbeat
+                    root.metadata = this.metadata
+                    root.payload = this.payload
+        -   mapping: |
+                root = this
+                
+                if this.exists("heartbeat") {
+                    root.type = "heartbeat"
+                } else {
+                    root.type = "event"
+                }
+        -   metric:
+                name: message_received
+                type: counter
+                labels:
+                    type: ${!json("type")}
+        -   mapping: |
+                root = if this.exists("heartbeat") {
+                    deleted()
+                }
+        -   cache:
+                resource: deduplication
+                operator: add
+                key: 'sportradar:feed:events:${! json("payload.event.id") }'
+                value: 0
+                ttl: 5m
+        -   mapping: |
+                root = if errored() {
+                    deleted() 
+                }
+
+output:
+    redis_streams:
+        url: redis://redis:6379
+        stream: sportradar_messages
+
+cache_resources:
+    -   label: deduplication
+        redis:
+            url: tcp://redis:6379
+
+metrics:
+    prometheus:
+        add_process_metrics: true
+        add_go_metrics: true
+    mapping: ""

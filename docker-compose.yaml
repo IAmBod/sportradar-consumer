@@ -1,0 +1,56 @@
+version: '3.9'
+
+services:
+    benthos:
+        image: jeffail/benthos:4.26
+        container_name: sportradar-benthos
+        restart: unless-stopped
+        env_file:
+            - path: .env
+            - path: .env.local
+              required: false
+        ports:
+            - 127.0.0.1:4195:4195
+        volumes:
+            - ./config/benthos/config.yaml:/benthos.yaml
+        depends_on:
+            - redis
+            - noop
+            - postgres
+
+    noop:
+        image: kennethreitz/httpbin
+        container_name: sportradar-noop
+        restart: unless-stopped
+
+    redis:
+        image: bitnami/redis:7.2
+        container_name: sportradar-redis
+        restart: unless-stopped
+        environment:
+            ALLOW_EMPTY_PASSWORD: yes
+        ports:
+            - 127.0.0.1:6379:6379
+        volumes:
+            - redis-data:/bitnami
+
+    postgres:
+        image: bitnami/postgresql:16.2.0
+        container_name: sportradar-postgres
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: sportradar
+            POSTGRES_PASSWORD: password
+            POSTGRES_DB: sportradar
+        ports:
+            - 127.0.0.1:5432:5432
+        volumes:
+            - postgres-data:/bitnami/postgresql
+
+volumes:
+    redis-data:
+        name: sportradar-redis-data
+        driver: local
+    postgres-data:
+        name: sportradar-postgres-data
+        driver: local
